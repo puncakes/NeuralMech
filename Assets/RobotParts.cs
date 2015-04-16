@@ -128,7 +128,7 @@ public class RobotParts {
 
 	public int setThrust(int x, double[] forces)
 	{
-		double force = 60.0;
+		double force = 55.0;
 		int index = 0;
 		for(int i = 0; i < _allThrusters.Count; i++)
 		{
@@ -172,12 +172,16 @@ public class RobotParts {
 		double[] array3 = getJointAngles();
 		double[] array4 = getMotorSpeed();
 		double[] array5 = getPositions ();
-		double[] array6 = getVelocities();
-		double[] array7 = getAngularVelocities();
-		double[] array8 = getThrusterForce ();
+		double[] array6 = getRotations ();
+		double[] array7 = getVelocities();
+		double[] array8 = getAngularVelocities();
+		double[] array9 = getThrusterForce ();
+		double[] array10 = getCenterOfMass ();
 
 		//ugly, don't care
-		return array1.Concat (array2).Concat (array3).Concat (array4).Concat(array5).Concat(array6).Concat(array7).Concat(array8).ToArray();
+		return array1.Concat (array2).Concat (array3).Concat (array4).Concat (array5)
+			.Concat (array6).Concat (array7).Concat (array8).Concat (array9).Concat (array10).ToArray ();
+		                                                                                                                                             
 	}
 
 	public double[] getRobotPartsOutputs ()
@@ -186,6 +190,18 @@ public class RobotParts {
 		double[] array2 = getThrusterForce ();
 
 		return array1.Concat(array2).ToArray();
+	}
+
+	public double[] getCenterOfMass()
+	{
+		double[] com = new double[2 * _allRigidBodies.Count];
+		for(int i = 0; i < _allRigidBodies.Count; i++) 
+		{
+			com[i*2] = _allRigidBodies[i].centerOfMass.x;
+			com[i*2+1] = _allRigidBodies[i].centerOfMass.y;
+		}
+		
+		return com;
 	}
 
 	public double[] getThrusterForce ()
@@ -216,6 +232,36 @@ public class RobotParts {
 		}
 		
 		return Vector3.zero;
+	}
+
+	public double getRotation()
+	{
+		if (_importantTransformObject != null) 
+		{
+			return _importantTransformObject.eulerAngles.z;
+		}
+		
+		foreach (Transform child in _allTransforms)
+		{
+			if(child.gameObject.tag == "RobotChest")
+			{
+				_importantTransformObject = child;
+				return child.eulerAngles.z;
+			}
+		}
+		
+		return 0;
+	}
+
+	public double[] getRotations()
+	{
+		double[] rotations = new double[_allTransforms.Count];
+		for(int i = 0; i < _allTransforms.Count; i++) 
+		{
+			rotations[i] = _allTransforms[i].eulerAngles.z;
+		}
+		
+		return rotations;
 	}
 
 	public double[] getPositions ()

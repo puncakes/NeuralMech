@@ -58,9 +58,10 @@ class GeneticAlgorithm
 		r.Destroy ();
 		
 		//setup inputs and hidden layers
-		_network.addLayer(new ActivationTANH(), numInputs, 0);
-		_network.addLayer(new ActivationTANH(), (int)(numInputs * 0.7), 1);
-		_network.addLayer(new ActivationTANH(), (int)(numInputs * 0.7), 1);
+		_network.addLayer(new ActivationTANH(), numInputs, 1);
+		_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
+		_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
+		//_network.addLayer(new ActivationTANH(), (int)(numInputs * 0.7), 1);
 		_network.addLayer(new ActivationTANH(), numOutputs, 0);
 		_network.finalize();
 	}
@@ -120,14 +121,14 @@ class GeneticAlgorithm
 		for (int i = 0; i < Robots.Count; i++) 
 		{
 			Robots[i].Reset();
-			if(i < countToMate+numOfOffspring)
+			/*if(i < countToMate || i > _populationSize - numOfOffspring)
 			{
 				Robots[i].setVisible(true);
 			}
 			else
 			{
 				Robots[i].setVisible(false);
-			}
+			}*/
 		}
 
 		//failed first attempt at multi-threading

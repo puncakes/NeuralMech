@@ -37,7 +37,7 @@ public class Robot : IComparable<Robot>
 
 	void init (GameObject gameObject)
 	{
-		_robot = (GameObject)UnityEngine.Object.Instantiate(Resources.Load("Robot 3", typeof(GameObject)));
+		_robot = (GameObject)UnityEngine.Object.Instantiate(Resources.Load("RobotFixedThrusters", typeof(GameObject)));
 
 		_allRenderers = _robot.GetComponentsInChildren<Renderer> ();
 
@@ -109,6 +109,7 @@ public class Robot : IComparable<Robot>
 	{
 
 		Vector3 pos = _robotParts.getPosition ();
+		double rot = _robotParts.getRotation ();
 		if (_recordHeight == null) 
 		{
 			_recordHeight = pos.y;
@@ -116,8 +117,12 @@ public class Robot : IComparable<Robot>
 			//_fitness = pos.y * 10.0;
 			_recordHeight = pos.y;
 		}
-		_fitness += pos.y;
-		_fitness -= Math.Abs (pos.x);
+		_fitness += 0.6f * pos.y;
+		foreach (Renderer r in _allRenderers) {
+			r.material.color = new Color(0, _recordHeight * 0.2f, 0);
+		}
+		//_fitness -= Math.Abs (pos.x);
+		_fitness -= Math.Abs (rot*0.01);
 		//_fitness = _robotParts.getPosition ().x * 10.0;
 
 	}
@@ -125,7 +130,7 @@ public class Robot : IComparable<Robot>
 	public void FinalizeScore ()
 	{
 		Vector3 pos = _robotParts.getPosition ();
-		//_fitness += _recordHeight * 50.0;
+		_fitness += _recordHeight * 200.0;
 		//_fitness += pos.y * 100.0;
 		//_fitness += pos.x * 10.0;
 	}

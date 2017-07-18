@@ -9,6 +9,13 @@ public enum NodeType
     Bias
 }
 
+public enum CorrelationItemType
+{
+	Match,
+	Disjoint,
+	Excess
+}
+
 public enum Mutation
 {
     ModifyWeights,
@@ -575,4 +582,211 @@ public class ConnectionGeneList : List<ConnectionGene>
     }
 
     #endregion
+}
+
+/// <summary>
+/// Statistics resulting from the comparison of two NEAT genomes.
+/// </summary>
+public class CorrelationStatistics
+{
+	int _matchingGeneCount;
+	int _disjointConnectionGeneCount;
+	int _excessConnectionGeneCount;
+	double _connectionWeightDelta;
+
+	#region Properties
+
+	/// <summary>
+	/// Gets or sets the number of matching connection genes between the two comparison genomes.
+	/// </summary>
+	public int MatchingGeneCount
+	{
+		get { return _matchingGeneCount; }
+		set { _matchingGeneCount = value; }
+	}
+
+	/// <summary>
+	/// Gets or sets the number of disjoint connection genes between the two comparison genomes.
+	/// </summary>
+	public int DisjointConnectionGeneCount
+	{
+		get { return _disjointConnectionGeneCount; }
+		set { _disjointConnectionGeneCount = value; }
+	}
+
+	/// <summary>
+	/// Gets or sets the number of excess connection genes between the two comparison genomes.
+	/// </summary>
+	public int ExcessConnectionGeneCount
+	{
+		get { return _excessConnectionGeneCount; }
+		set { _excessConnectionGeneCount = value; }
+	}
+
+	/// <summary>
+	/// Gets or sets the cumulative total of absolute weight differences between all of the connection genes that matched up.
+	/// </summary>
+	public double ConnectionWeightDelta
+	{
+		get { return _connectionWeightDelta; }
+		set { _connectionWeightDelta = value; }
+	}
+
+	#endregion
+}
+
+/// <summary>
+/// A single comparison item resulting from the comparison of two genomes. If the CorrelationItemType
+/// is Match then both connection gene properties will be non-null, otherwise one of them will be null 
+/// and the other will hold a reference to a disjoint or excess connection gene.
+/// 
+/// Note. We generally only compare connection genes when comparing genomes. Connection genes along with
+/// their innovation IDs actually represent the complete network topology (and of course the connection weights).
+/// </summary>
+public class CorrelationItem
+{
+	readonly CorrelationItemType _correlationItemType;
+	readonly ConnectionGene _connectionGene1;
+	readonly ConnectionGene _connectionGene2;
+
+	#region Constructor
+
+	/// <summary>
+	/// Constructs a new CorrelationItem.
+	/// </summary>
+	public CorrelationItem(CorrelationItemType correlationItemType, ConnectionGene connectionGene1, ConnectionGene connectionGene2)
+	{
+		_correlationItemType = correlationItemType;
+		_connectionGene1 = connectionGene1;
+		_connectionGene2 = connectionGene2;
+	}
+
+	#endregion
+
+	#region Properties
+
+	/// <summary>
+	/// Gets the CorrelationItemType.
+	/// </summary>
+	public CorrelationItemType CorrelationItemType
+	{
+		get { return _correlationItemType; }
+	}
+
+	/// <summary>
+	/// Gets the corresponding connection gene from comparison genome 1.
+	/// </summary>
+	public ConnectionGene ConnectionGene1
+	{
+		get { return _connectionGene1; }
+	}
+
+	/// <summary>
+	/// Gets the corresponding connection gene from comparison genome 2.
+	/// </summary>
+	public ConnectionGene ConnectionGene2
+	{
+		get { return _connectionGene2; }
+	}
+
+	#endregion
+}
+
+/// <summary>
+/// The results from comparing two NEAT genomes and correlating their connection genes.
+/// </summary>
+public class CorrelationResults
+{
+	readonly CorrelationStatistics _correlationStatistics = new CorrelationStatistics();
+	readonly List<CorrelationItem> _correlationItemList;
+
+	#region Constructor
+
+	/// <summary>
+	/// Constructs with a specified initial correlation item list capacity.
+	/// </summary>
+	public CorrelationResults(int itemListCapacity)
+	{
+		_correlationItemList = new List<CorrelationItem>(itemListCapacity);
+	}
+
+	#endregion
+
+	#region Properties
+
+	/// <summary>
+	/// Gets the statistics for the genome comparison.
+	/// </summary>
+	public CorrelationStatistics CorrelationStatistics
+	{
+		get { return _correlationStatistics; }
+	}
+
+	/// <summary>
+	/// Gets the list of correlation items from the genome comparison.
+	/// </summary>
+	public List<CorrelationItem> CorrelationItemList
+	{
+		get { return _correlationItemList; }
+	}
+
+	#endregion
+
+	#region Public Methods
+
+	/// <summary>
+	/// Performs an integrity check on the correlation items.
+	/// Returns true if the test is passed.
+	/// </summary>
+	public bool PerformIntegrityCheck()
+	{
+		long prevInnovationId = -1;
+
+		foreach(CorrelationItem item in _correlationItemList)
+		{
+			if(item.CorrelationItemType==CorrelationItemType.Match)
+			{
+				if(item.ConnectionGene1==null || item.ConnectionGene2==null) {
+					return false;
+				}
+
+				if((item.ConnectionGene1.innovationIndex != item.ConnectionGene2.innovationIndex)
+					|| (item.ConnectionGene1.srcInnovationIndex != item.ConnectionGene2.srcInnovationIndex)
+					|| (item.ConnectionGene1.destInnovationIndex != item.ConnectionGene2.destInnovationIndex)) {
+					return false;
+				}
+
+				// Innovation ID's should be in order and not duplicated.
+				if(item.ConnectionGene1.innovationIndex <= prevInnovationId) {
+					return false;
+				}
+				prevInnovationId = item.ConnectionGene1.innovationIndex;
+			}
+			else // Disjoint or excess gene.
+			{
+				if((item.ConnectionGene1==null && item.ConnectionGene2==null)
+					|| (item.ConnectionGene1!=null && item.ConnectionGene2!=null))
+				{   // Precisely one gene should be present.
+					return false;
+				}
+				if(item.ConnectionGene1 != null)
+				{
+					if(item.ConnectionGene1.innovationIndex <= prevInnovationId) {
+						return false;
+					}
+					prevInnovationId = item.ConnectionGene1.innovationIndex;
+				}
+				else // ConnectionGene2 is present.
+				{
+					if(item.ConnectionGene2.innovationIndex <= prevInnovationId) {
+						return false;
+					}
+					prevInnovationId = item.ConnectionGene2.innovationIndex;
+				}
+			}
+		}
+		return true;
+	}
+
+	#endregion
 }

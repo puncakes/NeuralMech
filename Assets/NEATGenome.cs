@@ -1,6 +1,7 @@
 ﻿
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class NEATGenome
 {
@@ -236,8 +237,120 @@ public class NEATGenome
     
     public void CreateOffspring(NEATGenome parent)
     {
-        //TODO
+		//overview of what's about to go down
+		//create a new genome that is a combination of the two parents. basically an OR operation on both genotypes (node list & connection list)
+		//looping through both parent's connections and marking matching/disjoint/excess genes into a master correlation list
+		//then that list is looped through to decide what operation is needed for that correlation: 
+		//	-inherit a weight from a parent for matching genes
+		//	-add a connection to the child genome on disjoint/excess genes (add missing src/dest nodes as well if they are not present in the child genome)
+
+		CorrelationResults correlationResults = CorrelateConnectionGeneLists (_connectionList, parent._connectionList);
+		Debug.Log ("CorrelationResults check: " + correlationResults.PerformIntegrityCheck () ? "passed" : "failed");
+
+
     }
+
+	/// <summary>
+	/// Correlates the ConnectionGenes from two distinct genomes based upon gene innovation numbers.
+	/// </summary>
+	private static CorrelationResults CorrelateConnectionGeneLists(ConnectionGeneList list1, ConnectionGeneList list2)
+	{
+		// If none of the connections match up then the number of correlation items will be the sum of the two
+		// connections list counts..
+		CorrelationResults correlationResults = new CorrelationResults(list1.Count + list2.Count);
+
+		//----- Test for special cases.
+		int list1Count = list1.Count;
+		int list2Count = list2.Count;
+		if(0 == list1Count && 0 == list2Count)
+		{   // Both lists are empty!
+			return correlationResults;
+		}
+
+		if(0 == list1Count)
+		{   // All list2 genes are excess.
+			correlationResults.CorrelationStatistics.ExcessConnectionGeneCount = list2Count;
+			foreach(ConnectionGene connectionGene in list2) {
+				correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Excess, null, connectionGene));
+			}
+			return correlationResults;
+		}
+
+		if(0 == list2Count)
+		{   // All list1 genes are excess.
+			correlationResults.CorrelationStatistics.ExcessConnectionGeneCount = list1Count;
+			foreach(ConnectionGene connectionGene in list1) {
+				correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Excess, connectionGene, null));
+			}
+			return correlationResults;
+		}
+
+		//----- Both connection genes lists contain genes - compare their contents.
+		int list1Idx=0;
+		int list2Idx=0;
+		ConnectionGene connectionGene1 = list1[list1Idx];
+		ConnectionGene connectionGene2 = list2[list2Idx];
+
+		for(;;)
+		{
+			if(connectionGene2.innovationIndex < connectionGene1.innovationIndex)
+			{   
+				// connectionGene2 is disjoint.
+				correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Disjoint, null, connectionGene2));
+				correlationResults.CorrelationStatistics.DisjointConnectionGeneCount++;
+
+				// Move to the next gene in list2.
+				list2Idx++;
+			}
+			else if(connectionGene1.innovationIndex == connectionGene2.innovationIndex)
+			{
+				correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Match, connectionGene1, connectionGene2));
+				correlationResults.CorrelationStatistics.ConnectionWeightDelta += Math.Abs(connectionGene1.weight - connectionGene2.weight);
+				correlationResults.CorrelationStatistics.MatchingGeneCount++;
+
+				// Move to the next gene in both lists.
+				list1Idx++;
+				list2Idx++;
+			}
+			else // (connectionGene2.InnovationId > connectionGene1.InnovationId)
+			{   
+				// connectionGene1 is disjoint.
+				correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Disjoint, connectionGene1, null));
+				correlationResults.CorrelationStatistics.DisjointConnectionGeneCount++;
+
+				// Move to the next gene in list1.
+				list1Idx++;
+			}
+
+			// Check if we have reached the end of one (or both) of the lists. If we have reached the end of both then 
+			// although we enter the first 'if' block it doesn't matter because the contained loop is not entered if both 
+			// lists have been exhausted.
+			if(list1Count == list1Idx)
+			{   
+				// All remaining list2 genes are excess.
+				for(; list2Idx < list2Count; list2Idx++)
+				{
+					correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Excess, null, list2[list2Idx]));
+					correlationResults.CorrelationStatistics.ExcessConnectionGeneCount++;
+				}
+				return correlationResults;
+			}
+
+			if(list2Count == list2Idx)
+			{
+				// All remaining list1 genes are excess.
+				for(; list1Idx < list1Count; list1Idx++)
+				{
+					correlationResults.CorrelationItemList.Add(new CorrelationItem(CorrelationItemType.Excess, list1[list1Idx], null));
+					correlationResults.CorrelationStatistics.ExcessConnectionGeneCount++;
+				}
+				return correlationResults;
+			}
+
+			connectionGene1 = list1[list1Idx];
+			connectionGene2 = list2[list2Idx];
+		}
+	}
 
     public void Mutate()
     {
@@ -614,6 +727,8 @@ public class NEATGenome
     
     private bool IsNeuronRedundant(NodeGene nodeGene)
     {
+		//prevent input/output/bias neurons from being deleted
+		//they can still end up not having connections though!
         if (nodeGene.ntype != NodeType.Hidden)
         {
             return false;

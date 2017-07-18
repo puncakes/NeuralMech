@@ -119,7 +119,7 @@ public class RobotParts {
 		for(int i = 0; i < _allHingeJoints.Count; i++)
 		{
 			JointMotor2D motor = _allHingeJoints[i].motor;
-			motor.motorSpeed = (float)speeds[i+x] * (float)scalar;
+			motor.motorSpeed = (float)speeds[x+i] * (float)scalar;
 			_allHingeJoints[i].motor = motor;
 			index++;
 		}
@@ -128,14 +128,14 @@ public class RobotParts {
 
 	public int setThrust(int x, double[] forces)
 	{
-		double force = 55.0;
+		double force = 15.0;
 		int index = 0;
 		for(int i = 0; i < _allThrusters.Count; i++)
 		{
 			//basic thrust toggle
 			if(forces[i+x]>0)
 			{
-				_allThrusters[i].addThrust(force);
+				_allThrusters[i].addThrust(forces[i + x] * force);
 			}
 			else
 			{

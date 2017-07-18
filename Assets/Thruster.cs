@@ -19,7 +19,7 @@ public class Thruster : MonoBehaviour {
 	public void addThrust(double t)
 	{
 		float thrust = (float)Math.Abs(t);
-		this.rigidbody2D.AddForce (this.transform.up * (float)thrust);
+		this.GetComponent<Rigidbody2D>().AddForce (this.transform.up * (float)thrust);
 		_particleSystem.startSpeed = thrust*0.16f;
 		_lastThrust = thrust;
 	}

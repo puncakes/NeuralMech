@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System;
+using SharpNeat.Phenomes;
 
 public class Robot : IComparable<Robot>
 {
@@ -16,9 +17,15 @@ public class Robot : IComparable<Robot>
 	private double _fitness;
 	private double[] _outputs;
 	private float _recordHeight;
+    private String _goName;
+
+    public String name;
+
+    public static int RobotCount = 0;
 
 	public Robot(GameObject gameObject)
 	{
+        _goName = gameObject.name;
 		init (gameObject);
 		
 		//helper class for retrieving inputs for the neural network
@@ -27,7 +34,8 @@ public class Robot : IComparable<Robot>
 
 	public Robot(GameObject gameObject, NeuralNetwork network)
 	{
-		init (gameObject);
+        _goName = gameObject.name;
+        init (gameObject);
 
 		//helper class for retrieving inputs for the neural network
 		_robotParts = new RobotParts (_robot);
@@ -37,7 +45,9 @@ public class Robot : IComparable<Robot>
 
 	void init (GameObject gameObject)
 	{
-		_robot = (GameObject)UnityEngine.Object.Instantiate(Resources.Load("RobotFixedThrusters", typeof(GameObject)));
+		_robot = (GameObject)UnityEngine.Object.Instantiate(Resources.Load(_goName, typeof(GameObject)));
+        name = "Robot: " + RobotCount;
+        RobotCount++;
 
 		_allRenderers = _robot.GetComponentsInChildren<Renderer> ();
 
@@ -117,12 +127,12 @@ public class Robot : IComparable<Robot>
 			//_fitness = pos.y * 10.0;
 			_recordHeight = pos.y;
 		}
-		_fitness += 0.6f * pos.y;
+		//_fitness += 0.1f * pos.y;
 		foreach (Renderer r in _allRenderers) {
-			r.material.color = new Color(0, _recordHeight * 0.2f, 0);
+			r.material.color = new Color(0.5f, Math.Max(0.5f, _recordHeight * 0.2f), 0.5f);
 		}
 		//_fitness -= Math.Abs (pos.x);
-		_fitness -= Math.Abs (rot*0.01);
+		//_fitness -= Math.Abs (rot*0.01);
 		//_fitness = _robotParts.getPosition ().x * 10.0;
 
 	}
@@ -135,18 +145,10 @@ public class Robot : IComparable<Robot>
 		//_fitness += pos.x * 10.0;
 	}
 
-	/// <summary>
-	/// Set the score.
-	/// </summary>
-	public double Fitness
-	{
-		get { return _fitness; }
-		set { _fitness = value; }
-	}
-	
-	#region IComparable implementation
-	
-	public int CompareTo (Robot other)
+
+    #region IComparable implementation
+
+    public int CompareTo (Robot other)
 	{
 		// might be null when deserializing
 		//if (_ga == null)
@@ -163,7 +165,7 @@ public class Robot : IComparable<Robot>
 		}
 		return 1;
 	}
-	
-	#endregion
+
+    #endregion
 }
 

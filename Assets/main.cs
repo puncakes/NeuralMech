@@ -11,6 +11,7 @@ public class main : MonoBehaviour {
 	public double _mutationChance = 0.05;
 	public double _percentBreeding = .2;
 	public double _breedingPoolPercentage = .4;
+    public bool elitism = false;
 
 	float generationTimeTrained = 0;
 	public float maxGenerationTrainTime = 20.0f;
@@ -23,7 +24,7 @@ public class main : MonoBehaviour {
 	}
 
 	void setupBrain() {
-		_ga = new GeneticAlgorithm (_robotPrefab, _popSize, _mutationChance, _percentBreeding, _breedingPoolPercentage);
+		_ga = new GeneticAlgorithm (_robotPrefab, _popSize, _mutationChance, _percentBreeding, _breedingPoolPercentage, elitism);
 	}
 
 	int generation = 0;

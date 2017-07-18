@@ -12,6 +12,8 @@ class GeneticAlgorithm
 	public double _percentToMate;
 	public double _matingPopulationPercent;
 
+    public bool _elitism;
+
 	public ICrossover Crossover { get; set; }
 	public IMutate Mutate { get; set; }
 
@@ -22,7 +24,7 @@ class GeneticAlgorithm
 	//the population
 	public List<Robot> Robots { get; set; }
 
-	public GeneticAlgorithm(GameObject gameObject, int popSize, double mutationChance, double percentToMate, double matingPopPercent)
+	public GeneticAlgorithm(GameObject gameObject, int popSize, double mutationChance, double percentToMate, double matingPopPercent, bool elitism)
 	{
 		_gameObject = gameObject;
 
@@ -35,6 +37,7 @@ class GeneticAlgorithm
 		_mutationChance = mutationChance;
 		_percentToMate = percentToMate;
 		_matingPopulationPercent = matingPopPercent;
+        _elitism = elitism;
 
 		Robots = new List<Robot> ();
 		for (int i = 0; i < _populationSize; i++) {
@@ -58,9 +61,9 @@ class GeneticAlgorithm
 		r.Destroy ();
 		
 		//setup inputs and hidden layers
-		_network.addLayer(new ActivationTANH(), numInputs, 1);
-		_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
-		_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
+		_network.addLayer(new ActivationTANH(), numInputs, 0);
+		//_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
+		//_network.addLayer(new ActivationTANH(), (int)(numInputs * 1.0), 1);
 		//_network.addLayer(new ActivationTANH(), (int)(numInputs * 0.7), 1);
 		_network.addLayer(new ActivationTANH(), numOutputs, 0);
 		_network.finalize();
@@ -76,15 +79,18 @@ class GeneticAlgorithm
 		Debug.Log ("Best Robot: " + Robots [0].Fitness);
 		
 		int countToMate = (int)(_populationSize * _percentToMate);
-		int numOfOffspring = countToMate * 2;
-		int offspringIndex = _populationSize - numOfOffspring;
-		int matingPopulationSize = (int)(_populationSize * _matingPopulationPercent);
+        int matingPopulationSize = (int)(_populationSize * _matingPopulationPercent);
+        int numOfOffspring = countToMate * 2;
+		int offspringIndex = matingPopulationSize;
+		
 
 
 		//split the mating into x / logical processor count threads
 		//or none if there is only 1
 
 		int procCount = Environment.ProcessorCount;
+
+        List<Robot> children = new List<Robot>();
 
 		for(int x = 0; x < countToMate; x++)
 		{
@@ -106,18 +112,47 @@ class GeneticAlgorithm
 			{
 				Mutate.PerformMutation(child2.getBrain());
 			}
-			
+
+            children.Add(child1);
+            children.Add(child2);
+
 			offspringIndex += 2;
 		}
 
-		//the portion of the population to be replaced;
-		for (int i = matingPopulationSize; i < _populationSize - numOfOffspring; i++) 
+        //need to cull robots that are not children to make more room in the gene pool
+        int numCulled = 0;
+		foreach(Robot r in Robots) 
 		{
-			//make new brain
-			Robots[i].getBrain().Randomize();
+            bool found = false;
+            if(r == Robots[0] && _elitism)
+            {
+                //Debug.Log("Skipping cull of elite brain: " + r.Fitness);
+                found = true;
+            } else {
+                foreach (Robot child in children)
+                {
+                    if (r.name == child.name)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            
+
+            //if it is not an offspring, then time to cull
+            if(!found)
+            {
+                //make new brain
+                r.getBrain().Randomize();
+                numCulled++;
+            }			
 		}
 
-		//reset all robots to original start positions
+        //Debug.Log("Num Culled: " + numCulled);
+
+        //reset all robots to original start positions
+        Robot.RobotCount = 0; //just for naming purposes
 		for (int i = 0; i < Robots.Count; i++) 
 		{
 			Robots[i].Reset();

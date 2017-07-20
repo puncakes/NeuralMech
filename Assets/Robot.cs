@@ -1,21 +1,23 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System;
-using SharpNeat.Phenomes;
 
 public class Robot : IComparable<Robot>
 {
 	GameObject _gameObject;
 	GameObject _robot;
-	NeuralNetwork _network;
+
+    //you have no idea how much work went into this one line
+	public NEATGenome _network { get; set; }
 
 	Transform[] _originalTransforms;
 	Renderer[] _allRenderers;
 
 	private RobotParts _robotParts;
 
-	private double _fitness;
-	private double[] _outputs;
+	private double _curentFitness;
+    private double[] _inputs;
+    private double[] _outputs;
 	private float _recordHeight;
     private String _goName;
 
@@ -29,10 +31,10 @@ public class Robot : IComparable<Robot>
 		init (gameObject);
 		
 		//helper class for retrieving inputs for the neural network
-		_robotParts = new RobotParts (_robot);
+		_robotParts = new RobotParts (_robot);        
 	}
 
-	public Robot(GameObject gameObject, NeuralNetwork network)
+	public Robot(GameObject gameObject, NEATGenome network)
 	{
         _goName = gameObject.name;
         init (gameObject);
@@ -40,8 +42,8 @@ public class Robot : IComparable<Robot>
 		//helper class for retrieving inputs for the neural network
 		_robotParts = new RobotParts (_robot);
 
-		_network = (NeuralNetwork)network.Clone ();
-	}
+		_network = new NEATGenome(network);
+    }
 
 	void init (GameObject gameObject)
 	{
@@ -58,7 +60,8 @@ public class Robot : IComparable<Robot>
 
 	public void Reset()
 	{
-		_fitness = 0;
+        _curentFitness = 0;
+		Fitness = 0;
 		_recordHeight = 0;
 		//Debug.Log ("Resetting...");
 
@@ -96,17 +99,14 @@ public class Robot : IComparable<Robot>
 		return _robotParts;
 	}
 
-	public NeuralNetwork getBrain ()
-	{
-		return _network;
-	}
-
+    public void GetInputsForNetwork()
+    {
+        _inputs = _robotParts.getRobotPartsInputs();
+    }
 
 	public void Think ()
 	{
-		double[] inputs = _robotParts.getRobotPartsInputs ();
-
-		_outputs = _network.Compute (inputs);
+		_outputs = _network.Compute (_inputs);
 	}
 
 	public void Act ()
@@ -117,7 +117,6 @@ public class Robot : IComparable<Robot>
 	//reward for moving left;
 	public void UpdateScores ()
 	{
-
 		Vector3 pos = _robotParts.getPosition ();
 		double rot = _robotParts.getRotation ();
 		if (_recordHeight == null) 
@@ -127,9 +126,9 @@ public class Robot : IComparable<Robot>
 			//_fitness = pos.y * 10.0;
 			_recordHeight = pos.y;
 		}
-		//_fitness += 0.1f * pos.y;
+		//_curentFitness += 0.001f * pos.x;
 		foreach (Renderer r in _allRenderers) {
-			r.material.color = new Color(0.5f, Math.Max(0.5f, _recordHeight * 0.2f), 0.5f);
+			r.material.color = new Color(0.5f, Math.Max(0.5f, (float)getScore() * 0.02f), 0.5f);
 		}
 		//_fitness -= Math.Abs (pos.x);
 		//_fitness -= Math.Abs (rot*0.01);
@@ -137,14 +136,24 @@ public class Robot : IComparable<Robot>
 
 	}
 
+    private double getScore()
+    {
+        double fitness = _curentFitness;
+        Vector3 pos = _robotParts.getPosition();
+        fitness += _recordHeight * 10.0;
+        //_fitness += pos.y * 100.0;
+        //fitness += pos.x * 5.0;
+
+        return fitness;
+    }
+
 	public void FinalizeScore ()
 	{
-		Vector3 pos = _robotParts.getPosition ();
-		_fitness += _recordHeight * 200.0;
-		//_fitness += pos.y * 100.0;
-		//_fitness += pos.x * 10.0;
+        Fitness += getScore();
 	}
 
+    //prolly dumb but idc
+    public double Fitness { get { return _network.Fitness; } set { _network.Fitness = value; } }
 
     #region IComparable implementation
 

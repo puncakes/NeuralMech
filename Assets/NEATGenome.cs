@@ -18,33 +18,33 @@ public class NEATGenome
     //this ensures non-unique innovations do not create extraneous/incorrectly labeled species
     public static Dictionary<int, NodeGeneRecord> NodeHistory = new Dictionary<int, NodeGeneRecord>();
 
+    //all genomes have one bias node alongside inpt nodes
+    public static int BiasCount = 1;
+
 
 
     //*********LOCAL TO INDIVIDUALS:********//
-    NodeGeneList _nodeList;
+    public NodeGeneList _nodeList;
     NodeGeneList _inputList;
     NodeGeneList _outputList;
 
-    ConnectionGeneList _connectionList;
+    public ConnectionGeneList _connectionList;
 
     List<NetworkLayer> _networkLayers;
 
-    public int BiasCount { get; set; }
     public int InputCount { get; set; }
     public int HiddenCount { get; set; }
     public int OutputCount { get; set; }
 
+    public double Fitness { get; set; }
+
     private int _populationSize;
-    private double _perturbAmount;
-    private double _perturbChance;
 
 
-    public NEATGenome(int numInputs, int numOutputs, int populationSize, double perturbAmount, double perturbChance)
-    {        
-        _populationSize = populationSize;
-        _perturbAmount = perturbAmount;
-        _perturbChance = perturbChance;
-
+    public NEATGenome(int numInputs, int numOutputs)
+    {
+        InputCount = numInputs;
+        OutputCount = numOutputs;
         _nodeList = new NodeGeneList();
         _inputList = new NodeGeneList();
         _outputList = new NodeGeneList();
@@ -54,6 +54,65 @@ public class NEATGenome
         _networkLayers = new List<NetworkLayer>();
 
         Initialize();
+    }
+
+    public NEATGenome(  NodeGeneList nodeGeneList,
+                        ConnectionGeneList connectionGeneList,
+                        int inputNeuronCount,
+                        int outputNeuronCount)
+    {
+        _nodeList = new NodeGeneList(nodeGeneList);
+        _connectionList = new ConnectionGeneList(connectionGeneList);
+        InputCount = inputNeuronCount;
+        OutputCount = outputNeuronCount;        
+
+        //make sure the conenction list is sorted by innovation id
+        _connectionList.SortByInnovationId();
+        _nodeList.SortByInnovationId();
+
+        _inputList = new NodeGeneList();
+        for (int i = 0; i < InputCount; i++)
+        {
+            _inputList.Add(_nodeList[i]);
+        }
+
+        _outputList = new NodeGeneList();
+        for (int i = InputCount+BiasCount; i < InputCount + BiasCount + OutputCount; i++)
+        {
+            _outputList.Add(_nodeList[i]);
+        }
+
+        _networkLayers = new List<NetworkLayer>();
+
+        CreateNetworkLayers();
+    }
+
+    public NEATGenome (NEATGenome sourceNetwork)
+    {
+        _nodeList = new NodeGeneList(sourceNetwork._nodeList);
+        _connectionList = new ConnectionGeneList(sourceNetwork._connectionList);
+        InputCount = sourceNetwork.InputCount;
+        OutputCount = sourceNetwork.OutputCount;
+
+        //make sure the conenction list is sorted by innovation id
+        _connectionList.SortByInnovationId();
+        _nodeList.SortByInnovationId();
+
+        _inputList = new NodeGeneList();
+        for (int i = 0; i < InputCount; i++)
+        {
+            _inputList.Add(_nodeList[i]);
+        }
+
+        _outputList = new NodeGeneList();
+        for (int i = InputCount + BiasCount; i < InputCount + BiasCount + OutputCount; i++)
+        {
+            _outputList.Add(_nodeList[i]);
+        }
+
+        _networkLayers = new List<NetworkLayer>();
+
+        CreateNetworkLayers();
     }
 
 
@@ -103,13 +162,11 @@ public class NEATGenome
                 cg.destInnovationIndex = _outputList[j].innovationIndex;
 
                 //add input/output references to the respective src/dest nodes
-                _inputList[i].OutputNodes.Add(cg.destInnovationIndex);
-                _outputList[j].InputNodes.Add(cg.srcInnovationIndex);
+                _inputList[i].OutputConnections.Add(cg.innovationIndex);
+                _outputList[j].InputConnections.Add(cg.innovationIndex);
 
-                //connections are stored in the genome, in the target Node, and in a global shared list for mutation history purposes
-                //to allow the target node to easily calculate connection weighted activation sums
+                //connections are stored in the genome and in a global shared list for mutation history purposes
                 _connectionList.Add(cg);
-                _outputList[j].srcConnections.Add(cg);
                 ConnectionHistory.Add(new ConnectionGeneRecord(cg.srcInnovationIndex, cg.destInnovationIndex), cg.innovationIndex);
             }
         }
@@ -119,6 +176,17 @@ public class NEATGenome
         _nodeList.SortByInnovationId();
 
         CreateNetworkLayers();
+    }
+
+    //go through all conenctions and randomize the weight values
+    //mainly used at the start of the genetic algorithm to seed the population with
+    //random genomes without changing innovation number 
+    public void Randomize()
+    {
+        foreach(ConnectionGene cg in _connectionList)
+        {
+            cg.weight = (ThreadSafeRandom.NextDouble() * 2.0) - 1.0;
+        }
     }
 
     //Should only be called when the network has changed
@@ -174,10 +242,18 @@ public class NEATGenome
 
         node.depth = depth;
 
-        //node.OutputNodes stores innovationIndexes so can use them directly to reference nodes within the list
-        foreach(int i in node.OutputNodes)
+        //node.OutputNodes stores innovationIndexes
+        foreach(int connIndex in node.OutputConnections)
         {
-            FindDepth(_nodeList[i], depth++);
+            int newDepth = depth+1;
+            try
+            {
+                int nodeId = _connectionList.GetConnectionById(connIndex).destInnovationIndex;
+                FindDepth(_nodeList.GetNodeById(nodeId), newDepth);
+            } catch (Exception e)
+            {
+                Debug.Log("whaa");
+            }
         }
     }
 
@@ -218,11 +294,16 @@ public class NEATGenome
                 else
                 {
                     //pull from the previously calculated layers' nodes to activate the current node
-                    foreach(ConnectionGene conn in n.srcConnections)
+                    foreach(int conn in n.InputConnections)
                     {
-                        n.activationSum += _nodeList[conn.srcInnovationIndex].activationSum * conn.weight;
+                        ConnectionGene cg = _connectionList.GetConnectionById(conn);
+                        n.activationSum += _nodeList.GetNodeById(cg.srcInnovationIndex).activationSum * cg.weight;
                     }
                 }
+
+                //call activation function here
+                //defaulting to TANH
+                n.activationSum = 2.0 / (1.0 + BoundMath.Exp(-2.0 * n.activationSum)) - 1.0;
             }
         }
 
@@ -235,7 +316,7 @@ public class NEATGenome
         return output;
     }
     
-    public void CreateOffspring(NEATGenome parent)
+    public NEATGenome CreateOffspring(NEATGenome parent)
     {
 		//overview of what's about to go down
 		//create a new genome that is a combination of the two parents. basically an OR operation on both genotypes (node list & connection list)
@@ -244,10 +325,115 @@ public class NEATGenome
 		//	-inherit a weight from a parent for matching genes
 		//	-add a connection to the child genome on disjoint/excess genes (add missing src/dest nodes as well if they are not present in the child genome)
 
+        //genome 1 = this
+        //genome 2 = parent
+
 		CorrelationResults correlationResults = CorrelateConnectionGeneLists (_connectionList, parent._connectionList);
-		Debug.Log ("CorrelationResults check: " + correlationResults.PerformIntegrityCheck () ? "passed" : "failed");
+		//Debug.Log ("CorrelationResults check: " + (correlationResults.PerformIntegrityCheck () ? "passed" : "failed"));
 
+        ConnectionGeneListBuilder connectionListBuilder = new ConnectionGeneListBuilder(_connectionList.Count + parent._connectionList.Count);
 
+        // Pre-register all of the fixed nodes (bias, inputs and outputs) with the ConnectionGeneListBuilder's
+        // node ID dictionary. We do this so that we can use the dictionary later on as a complete list of
+        // all node IDs required by the offspring genome - if we didn't do this we might miss some of the fixed nodes
+        // that happen to not be connected to or from.
+        SortedDictionary<int, NodeGene> nodeDictionary = connectionListBuilder.NodeDictionary;
+        for (int i = 0; i < (InputCount+BiasCount+OutputCount); i++)
+        {
+            nodeDictionary.Add(_nodeList[i].innovationIndex, _nodeList[i].CreateCopy(false));
+        }
+
+        //maybe change this to handle potentially different genomes with the same fitness
+        bool isFittest = Fitness >= parent.Fitness;
+
+        List<CorrelationItem> disjointExcessGeneList = new List<CorrelationItem>(correlationResults.CorrelationStatistics.DisjointConnectionGeneCount + correlationResults.CorrelationStatistics.ExcessConnectionGeneCount);
+
+        foreach ( CorrelationItem item in correlationResults.CorrelationItemList)
+        {
+            // Determine which genome to copy from (if any)
+            bool selectMe;
+            if (CorrelationItemType.Match == item.CorrelationItemType)
+            {   // For matches pick a parent genome at random (they both have the same connection gene, 
+                // but with a different connection weight)   
+                selectMe = ThreadSafeRandom.NextDouble() > 0.5 ? true : false;
+            }
+            else if (isFittest && item.ConnectionGene1 != null)
+            {   // Disjoint/excess gene on the fittest genome (genome #1).
+                selectMe = true;
+            }
+            else if (!isFittest && item.ConnectionGene2 != null)
+            {   // Disjoint/excess gene on the fittest genome (genome #2).
+                selectMe = false;
+            }
+            else
+            {   
+                //disjoint/excess gene in least fit genome
+                //store it to add later
+                disjointExcessGeneList.Add(item);
+                continue;
+            }
+
+            // Get ref to the selected connection gene and its source target neuron genes.
+            ConnectionGene connectionGene;
+            NEATGenome parentGenome;
+            if (selectMe)
+            {
+                connectionGene = item.ConnectionGene1;
+                parentGenome = this;
+            }
+            else
+            {
+                connectionGene = item.ConnectionGene2;
+                parentGenome = parent;
+            }
+
+            // Add connection gene to the offspring's genome. For genes from a match we set a flag to force
+            // an override of any existing gene with the same innovation ID (which may have come from a previous disjoint/excess gene).
+            // We prefer matched genes as they will tend to give better fitness to the offspring - this logic if based purely on the 
+            // fact that the gene has clearly been replicated at least once before and survived within at least two genomes.
+            connectionListBuilder.TryAddGene(connectionGene, parentGenome, (CorrelationItemType.Match == item.CorrelationItemType));
+        }
+
+        // Loop 2: Add disjoint/excess genes from the least fit parent (if any). These may create connectivity cycles, hence we need to test
+        // for this when evoloving feedforward-only networks.
+        if (disjointExcessGeneList != null && disjointExcessGeneList.Count > 0)
+        {
+            foreach (CorrelationItem correlItem in disjointExcessGeneList)
+            {
+                // Get ref to the selected connection gene and its source target neuron genes.
+                ConnectionGene connectionGene;
+                NEATGenome parentGenome;
+                if (correlItem.ConnectionGene1 != null)
+                {
+                    connectionGene = correlItem.ConnectionGene1;
+                    parentGenome = this;
+                }
+                else
+                {
+                    connectionGene = correlItem.ConnectionGene2;
+                    parentGenome = parent;
+                }
+
+                // We are effectively adding connections from one genome to another, as such it is possible to create cyclic conenctions here.
+                // Thus only add the connection if we allow cyclic connections *or* the connection does not form a cycle.
+                if (!connectionListBuilder.IsConnectionCyclic(connectionGene.srcInnovationIndex, connectionGene.destInnovationIndex))
+                {   // Add connection gene to the offspring's genome.
+                    connectionListBuilder.TryAddGene(connectionGene, parentGenome, false);
+                }
+            }
+        }
+
+        // Extract the connection builders definitive list of neurons into a list.
+        NodeGeneList nodeGeneList = new NodeGeneList(connectionListBuilder.NodeDictionary.Count);
+        foreach (NodeGene nodeGene in nodeDictionary.Values)
+        {
+            nodeGeneList.Add(nodeGene);
+        }
+
+        // Note that connectionListBuilder.ConnectionGeneList is already sorted by connection gene innovation ID 
+        // because it was generated by passing over the correlation items generated by CorrelateConnectionGeneLists()
+        // - which returns correlation items in order.
+        return new NEATGenome(nodeGeneList, connectionListBuilder.ConnectionGeneList, InputCount, OutputCount);
     }
 
 	/// <summary>
@@ -408,9 +594,9 @@ public class NEATGenome
         Boolean mutated = false;
         for(int i = 0; i < _connectionList.Count; i++)
         {
-            if(ThreadSafeRandom.NextDouble() < _perturbChance)
+            if(ThreadSafeRandom.NextDouble() < NEATParams.PerturbChance)
             {
-                _connectionList[i].weight += ((ThreadSafeRandom.NextDouble() * 2.0) - 1.0) * _perturbAmount;
+                _connectionList[i].weight += ((ThreadSafeRandom.NextDouble() * 2.0) - 1.0) * NEATParams.PerturbAmount;
                 mutated = true;
             }            
         }
@@ -419,7 +605,7 @@ public class NEATGenome
         if(_connectionList.Count > 0 && !mutated)
         {
             int index = (int)(ThreadSafeRandom.NextDouble() * _connectionList.Count);
-            _connectionList[index].weight += ((ThreadSafeRandom.NextDouble() * 2.0) - 1.0) * _perturbAmount;
+            _connectionList[index].weight += ((ThreadSafeRandom.NextDouble() * 2.0) - 1.0) * NEATParams.PerturbAmount;
         }
     }
 
@@ -452,7 +638,7 @@ public class NEATGenome
             // this is possible because genes can be acquired from other genomes via sexual reproduction.
             // Therefore we only re-use IDs if we can re-use all three together, otherwise we aren't assigning the IDs to matching
             // structures throughout the population, which is the reason for ID re-use.
-            if (_nodeList.BinarySearch(ngr.AddedNeuronId) == -1
+            if (_nodeList.BinarySearch(ngr.AddedNodeId) == -1
                 && _connectionList.BinarySearch(ngr.AddedInputConnectionId) == -1
                 && _connectionList.BinarySearch(ngr.AddedOutputConnectionId) == -1)
             {
@@ -466,7 +652,7 @@ public class NEATGenome
 
         if(reuseIds)
         {
-            nodeInnovationId = ngr.AddedNeuronId;
+            nodeInnovationId = ngr.AddedNodeId;
             srcInnovationId = ngr.AddedInputConnectionId;
             destInnovationId = ngr.AddedOutputConnectionId;
         }
@@ -495,19 +681,19 @@ public class NEATGenome
         }
 
         // Update each affected node to reflect the changefs made to the network
-        // Original source neuron.
+        // Original source node.
         NodeGene srcNodeGene = _nodeList.GetNodeById(connectionToReplace.srcInnovationIndex);
-        srcNodeGene.OutputNodes.Remove(connectionToReplace.destInnovationIndex);
-        srcNodeGene.OutputNodes.Add(n.innovationIndex);
+        srcNodeGene.OutputConnections.Remove(connectionToReplace.innovationIndex);
+        srcNodeGene.OutputConnections.Add(c1.innovationIndex);
 
-        // Original dest neuron.
+        // Original dest node.
         NodeGene destNodeGene = _nodeList.GetNodeById(connectionToReplace.destInnovationIndex);
-        destNodeGene.InputNodes.Remove(connectionToReplace.srcInnovationIndex);
-        destNodeGene.InputNodes.Add(n.innovationIndex);
+        destNodeGene.InputConnections.Remove(connectionToReplace.innovationIndex);
+        destNodeGene.InputConnections.Add(c2.innovationIndex);
 
-        // New neuron.
-        n.InputNodes.Add(connectionToReplace.srcInnovationIndex);
-        n.OutputNodes.Add(connectionToReplace.destInnovationIndex);
+        // New node.
+        n.InputConnections.Add(c1.innovationIndex);
+        n.OutputConnections.Add(c2.innovationIndex);
 
         //if this is a totally new mutation, add it to the history of the population
         //the key is the innovation number of the connection that was split for easy indexing
@@ -559,10 +745,19 @@ public class NEATGenome
             NodeGene srcNode = _nodeList[srcNodeIdx];
             NodeGene destNode = _nodeList[destNodeIdx];
 
-            if (srcNode.OutputNodes.Contains(destNode.innovationIndex) || IsConnectionCyclic(srcNode, destNode.innovationIndex))
-            {   
-                continue;
+            //first check global record for presence of this conenction
+            ConnectionGeneRecord cgr = new ConnectionGeneRecord(srcNode.innovationIndex, destNode.innovationIndex);
+            
+            int connIndex;
+            if(ConnectionHistory.TryGetValue(cgr, out connIndex))
+            {
+                //then check if it is found within this genome
+                if (srcNode.OutputConnections.Contains(connIndex) || IsConnectionCyclic(srcNode, destNode.innovationIndex))
+                {
+                    continue;
+                }
             }
+            
 
             //create the connection
             return mutateCreateConnection(srcNode, destNode);
@@ -575,24 +770,25 @@ public class NEATGenome
     {
         int innovationId;
         ConnectionGeneRecord cgr = new ConnectionGeneRecord(srcNode.innovationIndex, destNode.innovationIndex);
+        ConnectionGene cg;
         if (ConnectionHistory.TryGetValue(cgr, out innovationId))
         {
             //a previous connection gene was found in the history of the population
             //use that innovation number
-            ConnectionGene cg = new ConnectionGene(srcNode.innovationIndex, destNode.innovationIndex, ThreadSafeRandom.NextDouble() * 2.0 - 1.0, true, innovationId);
+            cg = new ConnectionGene(srcNode.innovationIndex, destNode.innovationIndex, ThreadSafeRandom.NextDouble() * 2.0 - 1.0, true, innovationId);
             _connectionList.InsertIntoPosition(cg);
         }
         else
         {
             int newInnovationId = CurrentInnovation++;
-            ConnectionGene cg = new ConnectionGene(srcNode.innovationIndex, destNode.innovationIndex, ThreadSafeRandom.NextDouble() * 2.0 - 1.0, true, newInnovationId);
+            cg = new ConnectionGene(srcNode.innovationIndex, destNode.innovationIndex, ThreadSafeRandom.NextDouble() * 2.0 - 1.0, true, newInnovationId);
             _connectionList.Add(cg);
             ConnectionHistory.Add(cgr, newInnovationId);
         }
 
         // Track connections associated with each neuron.
-        srcNode.OutputNodes.Add(destNode.innovationIndex);
-        destNode.InputNodes.Add(srcNode.innovationIndex);
+        srcNode.OutputConnections.Add(cg.innovationIndex);
+        destNode.InputConnections.Add(cg.innovationIndex);
 
         return true;
     }
@@ -620,9 +816,9 @@ public class NEATGenome
 
         // Push source neuron's sources onto the work stack. We could just push the source neuron but we choose
         // to cover that test above to avoid the one extra neuronID lookup that would require.
-        foreach (int neuronId in srcNode.InputNodes)
+        foreach (int ConnId in srcNode.InputConnections)
         {
-            workStack.Push(neuronId);
+            workStack.Push(_connectionList.GetConnectionById(ConnId).srcInnovationIndex);
         }
 
         // While there are neurons to check/traverse.
@@ -647,9 +843,9 @@ public class NEATGenome
 
             // Push the current neuron's source neurons onto the work stack.
             NodeGene currNode = _nodeList.GetNodeById(currNodeId);
-            foreach (int neuronId in currNode.InputNodes)
+            foreach (int ConnId in currNode.InputConnections)
             {
-                workStack.Push(neuronId);
+                workStack.Push(_connectionList.GetConnectionById(ConnId).srcInnovationIndex);
             }
         }
         
@@ -674,7 +870,7 @@ public class NEATGenome
         // Source neuron.
         int srcNodeIdx = _nodeList.BinarySearch(connectionToDelete.srcInnovationIndex);
         NodeGene srcNodeGene = _nodeList[srcNodeIdx];
-        srcNodeGene.OutputNodes.Remove(connectionToDelete.destInnovationIndex);
+        srcNodeGene.OutputConnections.Remove(connectionToDelete.innovationIndex);
 
         if (IsNeuronRedundant(srcNodeGene))
         {
@@ -685,7 +881,7 @@ public class NEATGenome
         // Target neuron.
         int destNodeIdx = _nodeList.BinarySearch(connectionToDelete.destInnovationIndex);
         NodeGene destNodeGene = _nodeList[destNodeIdx];
-        destNodeGene.InputNodes.Remove(connectionToDelete.srcInnovationIndex);
+        destNodeGene.InputConnections.Remove(connectionToDelete.innovationIndex);
 
         // Note. Check that source and target neurons are not the same neuron.
         if (srcNodeGene != destNodeGene
@@ -700,24 +896,7 @@ public class NEATGenome
 
     private NodeGene CreateNodeGene(int innovationIndex, NodeType nodeType)
     {
-        switch (nodeType)
-        {
-            case NodeType.Bias:
-                BiasCount++;
-                break;
-            case NodeType.Hidden:
-                HiddenCount++;
-                break;
-            case NodeType.Input:
-                InputCount++;
-                break;
-            case NodeType.Output:
-                OutputCount++;
-                break;
-        }
-
         NodeGene n = new NodeGene();
-        n.srcConnections = new List<ConnectionGene>();
         n.innovationIndex = innovationIndex;
         n.ntype = nodeType;
         n.activationSum = 0;
@@ -733,6 +912,6 @@ public class NEATGenome
         {
             return false;
         }
-        return (0 == (nodeGene.InputNodes.Count + nodeGene.OutputNodes.Count));
+        return (0 == (nodeGene.InputConnections.Count + nodeGene.OutputConnections.Count));
     }
 }

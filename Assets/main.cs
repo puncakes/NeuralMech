@@ -34,13 +34,20 @@ public class main : MonoBehaviour {
 		List<Robot> robots = _ga.Robots;
 		if (generationTimeTrained < maxGenerationTrainTime) 
 		{
-			for(int i = 0; i < robots.Count; i++)
-			{
-				robots[i].Think();
-				robots[i].Act();
-				robots[i].UpdateScores();
-			}
-			generationTimeTrained += Time.deltaTime;
+            for (int i = 0; i < robots.Count; i++)
+            {
+                robots[i].GetInputsForNetwork();
+            }
+
+            Parallel.For(robots.Count, new System.Action<int>(ComputeNetworks));
+
+            for (int i = 0; i < robots.Count; i++)
+            {
+                robots[i].Act();
+                robots[i].UpdateScores();
+            }
+
+            generationTimeTrained += Time.deltaTime;
 		} else {
 			generationTimeTrained = 0;
 			for(int i = 0; i < robots.Count; i++)
@@ -50,4 +57,10 @@ public class main : MonoBehaviour {
 			_ga.nextGeneration();
 		}
 	}
+
+    private void ComputeNetworks(int i)
+    {
+        List<Robot> robots = _ga.Robots;
+        robots[i].Think();        
+    }
 }

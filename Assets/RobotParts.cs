@@ -128,7 +128,7 @@ public class RobotParts {
 
 	public int setThrust(int x, double[] forces)
 	{
-		double force = 15.0;
+		double force = 55.0;
 		int index = 0;
 		for(int i = 0; i < _allThrusters.Count; i++)
 		{

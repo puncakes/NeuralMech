@@ -26,9 +26,9 @@ public enum Mutation
 
 public class NodeGene
 {
-    public HashSet<int> InputNodes;
-    public HashSet<int> OutputNodes;
-    public List<ConnectionGene> srcConnections;
+    //
+    public HashSet<int> InputConnections;
+    public HashSet<int> OutputConnections;
     public int innovationIndex;
     public NodeType ntype;
     public int depth;
@@ -36,14 +36,15 @@ public class NodeGene
 
     public NodeGene()
     {
-
+        InputConnections = new HashSet<int>();
+        OutputConnections = new HashSet<int>();
     }
 
     /// <summary>
     /// Copy constructor.
     /// </summary>
-    /// <param name="copyFrom">NeuronGene to copy from.</param>
-    /// <param name="copyConnectivityData">Indicates whether or not top copy connectivity data for the neuron.</param>
+    /// <param name="copyFrom">NodeGene to copy from.</param>
+    /// <param name="copyConnectivityData">Indicates whether or not top copy connectivity data for the Node.</param>
     public NodeGene(NodeGene copyFrom, bool copyConnectivityData)
     {
         innovationIndex = copyFrom.innovationIndex;
@@ -52,19 +53,19 @@ public class NodeGene
 
         if (copyConnectivityData)
         {
-            InputNodes = new HashSet<int>(copyFrom.InputNodes);
-            OutputNodes = new HashSet<int>(copyFrom.OutputNodes);
+            InputConnections = new HashSet<int>(copyFrom.InputConnections);
+            OutputConnections = new HashSet<int>(copyFrom.OutputConnections);
         }
         else
         {
-            InputNodes = new HashSet<int>();
-            OutputNodes = new HashSet<int>();
+            InputConnections = new HashSet<int>();
+            OutputConnections = new HashSet<int>();
         }
     }
 
-    public NodeGene createCopy()
+    public NodeGene CreateCopy(bool copyData)
     {
-        return new NodeGene(this, true);
+        return new NodeGene(this, copyData);
     }
 }
 
@@ -93,8 +94,8 @@ public class ConnectionGene
     /// <summary>
     /// Copy constructor.
     /// </summary>
-    /// <param name="copyFrom">NeuronGene to copy from.</param>
-    /// <param name="copyConnectivityData">Indicates whether or not top copy connectivity data for the neuron.</param>
+    /// <param name="copyFrom">NodeGene to copy from.</param>
+    /// <param name="copyConnectivityData">Indicates whether or not top copy connectivity data for the Node.</param>
     public ConnectionGene(ConnectionGene copyFrom)
     {
         innovationIndex = copyFrom.innovationIndex;
@@ -170,7 +171,7 @@ public struct ConnectionGeneRecord : IEqualityComparer<ConnectionGeneRecord>
 
         // ENHANCEMENT: Consider better hashes such as FNV or SuperFastHash
         // Also try this from Java's com.sun.hotspot.igv.data.Pair class.
-        // return (int)(_srcNeuronId * 71u + _tgtNeuronId);
+        // return (int)(_srcNodeId * 71u + _tgtNodeId);
     }
 
     #endregion
@@ -179,9 +180,9 @@ public struct ConnectionGeneRecord : IEqualityComparer<ConnectionGeneRecord>
 public struct NodeGeneRecord
 {
     /// <summary>
-    /// Represents an added neuron. When a neuron is added to a neural network in NEAT an existing
-    /// connection between two neurons is discarded and replaced with the new neuron and two new connections,
-    /// one connection between the source neuron and the new neuron and another from the new neuron to the target neuron.
+    /// Represents an added Node. When a Node is added to a neural network in NEAT an existing
+    /// connection between two Nodes is discarded and replaced with the new Node and two new connections,
+    /// one connection between the source Node and the new Node and another from the new Node to the target Node.
     /// This struct represents those three IDs.
     /// 
     /// This struct exists to represent newly added structure in a history buffer of added structures. This allows us to 
@@ -209,9 +210,9 @@ public struct NodeGeneRecord
     #region Properties
 
     /// <summary>
-    /// Gets the added neuron's ID.
+    /// Gets the added Node's ID.
     /// </summary>
-    public int AddedNeuronId
+    public int AddedNodeId
     {
         get { return _addedNodeId; }
     }
@@ -239,12 +240,18 @@ public class NetworkLayer
 {
     public NodeGeneList NodesInLayer;
     public int layerDepth;
+
+    public NetworkLayer()
+    {
+        NodesInLayer = new NodeGeneList();
+        layerDepth = -1;
+    }
 }
 
 // ENHANCEMENT: Consider switching to a SortedList[K,V] - which guarantees item sort order at all times. 
 
 /// <summary>
-/// Represents a sorted list of NeuronGene objects. The sorting of the items is done on request
+/// Represents a sorted list of NodeGene objects. The sorting of the items is done on request
 /// rather than being strictly enforced at all times (e.g. as part of adding and removing items). This
 /// approach is currently more convenient for use in some of the routines that work with NEAT genomes.
 /// 
@@ -283,7 +290,7 @@ public class NodeGeneList : List<NodeGene>
     {
         foreach (NodeGene srcGene in copyFrom)
         {
-            Add(srcGene.createCopy());
+            Add(srcGene.CreateCopy(true));
         }
     }
 
@@ -292,8 +299,8 @@ public class NodeGeneList : List<NodeGene>
     #region Public Methods
 
     /// <summary>
-    /// Inserts a NeuronGene into its correct (sorted) location within the gene list.
-    /// Normally neuron genes can safely be assumed to have a new Innovation ID higher
+    /// Inserts a NodeGene into its correct (sorted) location within the gene list.
+    /// Normally Node genes can safely be assumed to have a new Innovation ID higher
     /// than all existing IDs, and so we can just call Add().
     /// This routine handles genes with older IDs that need placing correctly.
     /// </summary>
@@ -314,7 +321,7 @@ public class NodeGeneList : List<NodeGene>
     }
 
     /// <summary>
-    /// Remove the neuron gene with the specified innovation ID.
+    /// Remove the Node gene with the specified innovation ID.
     /// Returns the removed gene.
     /// </summary>
     public NodeGene Remove(int nodeId)
@@ -322,7 +329,7 @@ public class NodeGeneList : List<NodeGene>
         int idx = BinarySearch(nodeId);
         if (idx < 0)
         {
-            throw new ApplicationException("Attempt to remove neuron with an unknown neuronId");
+            throw new ApplicationException("Attempt to remove Node with an unknown NodeId");
         }
         NodeGene nodeGene = this[idx];
         RemoveAt(idx);
@@ -330,7 +337,7 @@ public class NodeGeneList : List<NodeGene>
     }
 
     /// <summary>
-    /// Gets the neuron gene with the specified innovation ID using a fast binary search. 
+    /// Gets the Node gene with the specified innovation ID using a fast binary search. 
     /// Returns null if no such gene is in the list.
     /// </summary>
     public NodeGene GetNodeById(int nodeId)
@@ -344,7 +351,7 @@ public class NodeGeneList : List<NodeGene>
     }
 
     /// <summary>
-    /// Sort neuron gene's into ascending order by their innovation IDs.
+    /// Sort Node gene's into ascending order by their innovation IDs.
     /// </summary>
     public void SortByInnovationId()
     {
@@ -456,8 +463,8 @@ public class ConnectionGeneList : List<ConnectionGene>
     #region Public Methods
 
     /// <summary>
-    /// Inserts a NeuronGene into its correct (sorted) location within the gene list.
-    /// Normally neuron genes can safely be assumed to have a new Innovation ID higher
+    /// Inserts a NodeGene into its correct (sorted) location within the gene list.
+    /// Normally Node genes can safely be assumed to have a new Innovation ID higher
     /// than all existing IDs, and so we can just call Add().
     /// This routine handles genes with older IDs that need placing correctly.
     /// </summary>
@@ -478,7 +485,7 @@ public class ConnectionGeneList : List<ConnectionGene>
     }
 
     /// <summary>
-    /// Remove the neuron gene with the specified innovation ID.
+    /// Remove the Node gene with the specified innovation ID.
     /// Returns the removed gene.
     /// </summary>
     public ConnectionGene Remove(int nodeId)
@@ -486,7 +493,7 @@ public class ConnectionGeneList : List<ConnectionGene>
         int idx = BinarySearch(nodeId);
         if (idx < 0)
         {
-            throw new ApplicationException("Attempt to remove neuron with an unknown neuronId");
+            throw new ApplicationException("Attempt to remove Node with an unknown NodeId");
         }
         ConnectionGene nodeGene = this[idx];
         RemoveAt(idx);
@@ -494,10 +501,10 @@ public class ConnectionGeneList : List<ConnectionGene>
     }
 
     /// <summary>
-    /// Gets the neuron gene with the specified innovation ID using a fast binary search. 
+    /// Gets the Node gene with the specified innovation ID using a fast binary search. 
     /// Returns null if no such gene is in the list.
     /// </summary>
-    public ConnectionGene GetNodeById(int nodeId)
+    public ConnectionGene GetConnectionById(int nodeId)
     {
         int idx = BinarySearch(nodeId);
         if (idx < 0)
@@ -508,7 +515,7 @@ public class ConnectionGeneList : List<ConnectionGene>
     }
 
     /// <summary>
-    /// Sort neuron gene's into ascending order by their innovation IDs.
+    /// Sort Node gene's into ascending order by their innovation IDs.
     /// </summary>
     public void SortByInnovationId()
     {
@@ -789,4 +796,208 @@ public class CorrelationResults
 	}
 
 	#endregion
+}
+
+/// <summary>
+/// Used for building a list of connection genes. 
+/// 
+/// Connection genes are added one by one to a list and a dictionary of added connection genes is maintained
+/// keyed on ConnectionEndpointsStruct to allow a caller to check if a connection with the same end points
+/// (and potentially a different innovation ID) already exists in the list.
+/// </summary>
+public class ConnectionGeneListBuilder
+{
+    readonly ConnectionGeneList _connectionGeneList;
+    readonly Dictionary<ConnectionGeneRecord, ConnectionGene> _connectionGeneDictionary;
+    readonly SortedDictionary<int, NodeGene> _nodeDictionary;
+    // Note. connection gene innovation IDs always start above zero as they share the ID space with nodes, 
+    // which always come first (e.g. bias node is always ID 0).
+    int _highestConnectionGeneId = 0;
+
+    #region Constructor
+
+    /// <summary>
+    /// Constructs the builder with the provided capacity. The capacity should be chosen 
+    /// to limit the number of memory re-allocations that occur within the contained
+    /// connection list dictionary.
+    /// </summary>
+    public ConnectionGeneListBuilder(int connectionCapacity)
+    {
+        _connectionGeneList = new ConnectionGeneList(connectionCapacity);
+        _connectionGeneDictionary = new Dictionary<ConnectionGeneRecord, ConnectionGene>(connectionCapacity);
+        // TODO: Determine better initial capacity.
+        _nodeDictionary = new SortedDictionary<int, NodeGene>();
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets the contained list of connection genes.
+    /// </summary>
+    public ConnectionGeneList ConnectionGeneList
+    {
+        get { return _connectionGeneList; }
+    }
+
+    /// <summary>
+    /// Gets the builder's dictionary of connection genes keyed on ConnectionEndpointsStruct.
+    /// </summary>
+    public Dictionary<ConnectionGeneRecord, ConnectionGene> ConnectionGeneDictionary
+    {
+        get { return _connectionGeneDictionary; }
+    }
+
+    /// <summary>
+    /// Gets the builder's dictionary of node IDs obtained from contained connection gene endpoints.
+    /// </summary>
+    public SortedDictionary<int, NodeGene> NodeDictionary
+    {
+        get { return _nodeDictionary; }
+    }
+
+    #endregion
+
+    #region Public Methods
+
+    /// <summary>
+    /// Add a ConnectionGene to the builder, but only if the connection is not already present (as determined by it's node ID endpoints).
+    /// </summary>
+    /// <param name="connectionGene">The connection to add.</param>
+    /// <param name="parentGenome">The conenction's parent genome. This is used to obtain NodeGene(s) for the connection endpoints.</param>
+    /// <param name="overwriteExisting">A flag that indicates if this connection should take precedence oevr an existing connection with
+    /// the same endpoints.</param>
+    public void TryAddGene(ConnectionGene connectionGene, NEATGenome parentGenome, bool overwriteExisting)
+    {
+        // Check if a matching gene has already been added.
+        ConnectionGeneRecord connectionKey = new ConnectionGeneRecord(connectionGene.srcInnovationIndex, connectionGene.destInnovationIndex);
+
+        ConnectionGene existingConnectionGene;
+        if (!_connectionGeneDictionary.TryGetValue(connectionKey, out existingConnectionGene))
+        {   // Add new connection gene.
+            ConnectionGene connectionGeneCopy = new ConnectionGene(connectionGene);
+            _connectionGeneDictionary.Add(connectionKey, connectionGeneCopy);
+
+            // Insert connection gene into a list. Use more efficient approach (append to end) if we know the gene belongs at the end.
+            if (connectionGeneCopy.innovationIndex > _highestConnectionGeneId)
+            {
+                _connectionGeneList.Add(connectionGeneCopy);
+                _highestConnectionGeneId = connectionGeneCopy.innovationIndex;
+            }
+            else
+            {
+                _connectionGeneList.InsertIntoPosition(connectionGeneCopy);
+            }
+
+            // Add node genes (if not already added).
+            // Source node.
+            NodeGene srcNodeGene;
+            if (!_nodeDictionary.TryGetValue(connectionGene.srcInnovationIndex, out srcNodeGene))
+            {
+                srcNodeGene = parentGenome._nodeList.GetNodeById(connectionGene.srcInnovationIndex);
+                srcNodeGene = new NodeGene(srcNodeGene, false); // Make a copy.
+                _nodeDictionary.Add(srcNodeGene.innovationIndex, srcNodeGene);
+            }
+
+            // Target node.
+            NodeGene tgtNodeGene;
+            if (!_nodeDictionary.TryGetValue(connectionGene.destInnovationIndex, out tgtNodeGene))
+            {
+                tgtNodeGene = parentGenome._nodeList.GetNodeById(connectionGene.destInnovationIndex);
+                tgtNodeGene = new NodeGene(tgtNodeGene, false); // Make a copy.
+                _nodeDictionary.Add(tgtNodeGene.innovationIndex, tgtNodeGene);
+            }
+
+            // Register connectivity with each node.
+            srcNodeGene.OutputConnections.Add(connectionGene.innovationIndex);
+            tgtNodeGene.InputConnections.Add(connectionGene.innovationIndex);
+        }
+        else if (overwriteExisting)
+        {   // The genome we are building already has a connection with the same node endpoints as the one we are
+            // trying to add. It didn't match up during correlation because it has a different innovation number, this
+            // is possible because the innovation history buffers throw away old innovations in a FIFO manner in order
+            // to prevent them from bloating.
+
+            // Here the 'overwriteExisting' flag is set so the gene we are currently trying to add is probably from the
+            // fitter parent, and therefore we want to use its connection weight in place of the existing gene's weight.
+            existingConnectionGene.weight = connectionGene.weight;
+        }
+    }
+
+    /// <summary>
+    /// Tests if adding the specified connection would cause a cyclic pathway in the network connectivity.
+    /// Returns true if the connection would form a cycle.
+    /// Note. This same logic is implemented on NeatGenome.IsConnectionCyclic() but against slightly 
+    /// different data structures, hence the method is re-implemented here.
+    /// </summary>
+    public bool IsConnectionCyclic(int srcNodeId, int tgtNodeId)
+    {
+        // Quick test. Is connection connecting a node to itself.
+        if (srcNodeId == tgtNodeId)
+        {
+            return true;
+        }
+
+        // Quick test. If one of the node's is not yet registered with the builder then there can be no cyclic connection
+        // (the connection is coming-from or going-to a dead end).
+        NodeGene srcNode;
+        if (!_nodeDictionary.TryGetValue(srcNodeId, out srcNode) || !_nodeDictionary.ContainsKey(tgtNodeId))
+        {
+            return false;
+        }
+
+        // Trace backwards through sourceNode's source Nodes. If targetNode is encountered then it feeds
+        // signals into sourceNode already and therefore a new connection between sourceNode and targetNode
+        // would create a cycle.
+
+        // Maintain a set of Nodes that have been visited. This allows us to avoid unnecessary re-traversal 
+        // of the network and detection of cyclic connections.
+        HashSet<int> visitedNodes = new HashSet<int>();
+        visitedNodes.Add(srcNodeId);
+
+        // Search uses an explicitly created stack instead of function recursion, the logic here is that this 
+        // may be more efficient through avoidance of multiple function calls (but not sure).
+        Stack<int> workStack = new Stack<int>();
+
+        // Push source Node's sources onto the work stack. We could just push the source Node but we choose
+        // to cover that test above to avoid the one extra NodeID lookup that would require.
+        foreach (int ConnId in srcNode.InputConnections)
+        {
+            workStack.Push(_connectionGeneList.GetConnectionById(ConnId).srcInnovationIndex);
+        }
+
+        // While there are Nodes to check/traverse.
+        while (0 != workStack.Count)
+        {
+            // Pop a Node to check from the top of the stack, and then check it.
+            int currNodeId = workStack.Pop();
+            if (visitedNodes.Contains(currNodeId))
+            {
+                // Already visited (via a different route).
+                continue;
+            }
+
+            if (currNodeId == tgtNodeId)
+            {
+                // Target Node already feeds into the source Node.
+                return true;
+            }
+
+            // Register visit of this node.
+            visitedNodes.Add(currNodeId);
+
+            // Push the current Node's source Nodes onto the work stack.
+            NodeGene currNode = _nodeDictionary[currNodeId];
+            foreach (int ConnId in currNode.InputConnections)
+            {
+                workStack.Push(_connectionGeneList.GetConnectionById(ConnId).srcInnovationIndex);
+            }
+        }
+
+        // Connection not cyclic.
+        return false;
+    }
+
+    #endregion
 }

@@ -28,7 +28,7 @@ public class NEATGenome
     NodeGeneList _inputList;
     NodeGeneList _outputList;
 
-    public ConnectionGeneList _connectionList;
+    public ConnectionGeneList _connectionList;    
 
     List<NetworkLayer> _networkLayers;
 
@@ -39,6 +39,10 @@ public class NEATGenome
     public double Fitness { get; set; }
 
     private int _populationSize;
+
+    //used in speciation
+    int _specieIdx;
+    private CoordinateVector _position;
 
 
     public NEATGenome(int numInputs, int numOutputs)
@@ -913,5 +917,45 @@ public class NEATGenome
             return false;
         }
         return (0 == (nodeGene.InputConnections.Count + nodeGene.OutputConnections.Count));
+    }
+
+    /// <summary>
+    /// Gets or sets a specie index. This is the index of the species that the genome is in.
+    /// Implementing this is required only when using evolution algorithms that speciate genomes.
+    /// </summary>
+    public int SpecieIdx
+    {
+        get { return _specieIdx; }
+        set { _specieIdx = value; }
+    }
+
+    /// <summary>
+    /// Gets a coordinate that represents the genome's position in the search space (also known
+    /// as the genetic encoding space). This allows speciation/clustering algorithms to operate on
+    /// an abstract cordinate data type rather than being coded against specific IGenome types.
+    /// </summary>
+    public CoordinateVector Position
+    {
+        get
+        {
+            if (null == _position)
+            {
+                // Consider each connection gene as a dimension where the innovation ID is the
+                // dimension's ID and the weight is the position within that dimension.
+                // The coordinate elements in the resulting array must be sorted by innovation/dimension ID,
+                // this requirement is met by the connection gene list also requiring to be sorted at all times.
+                ConnectionGeneList list = _connectionList;
+
+                int count = list.Count;
+                KeyValuePair<int, double>[] coordElemArray = new KeyValuePair<int, double>[count];
+
+                for (int i = 0; i < count; i++)
+                {
+                    coordElemArray[i] = new KeyValuePair<int, double>(list[i].innovationIndex, list[i].weight);
+                }
+                _position = new CoordinateVector(coordElemArray);
+            }
+            return _position;
+        }
     }
 }

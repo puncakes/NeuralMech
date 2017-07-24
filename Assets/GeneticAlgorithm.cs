@@ -14,26 +14,17 @@ class GeneticAlgorithm
 
     public bool _elitism;
 
-    readonly ISpeciationStrategy<NEATGenome> _speciationStrategy;
-    IList<Specie<NEATGenome>> _specieList;
+    readonly ISpeciationStrategy _speciationStrategy;
+    IList<Specie> _specieList;
 
-    private GameObject _gameObject;
-	
+    NEATGenome _currentBestGenome;
+    int _bestSpecieIdx;	
 	
 	//the population
-	public List<Robot> Robots { get; set; }
+	public List<NEATGenome> _genomeList { get; set; }
 
-	public GeneticAlgorithm(GameObject gameObject, int popSize, double mutationChance, double percentToMate, double matingPopPercent, bool elitism)
+	public GeneticAlgorithm(NEATGenome seedNetwork, int popSize, double mutationChance, double percentToMate, double matingPopPercent, bool elitism)
 	{
-		_gameObject = gameObject;
-
-        //constructer for initializing the robot parts
-        //without instantiating the unity object
-        Robot r = new Robot(_gameObject);
-        int numInputs = r.getRobotParts().getRobotPartsInputs().Length;
-        int numOutputs = r.getRobotParts().getRobotPartsOutputs().Length;
-
-        NEATGenome seedNetwork = new NEATGenome(numInputs, numOutputs);
 
 		_populationSize = popSize;
 		_mutationChance = mutationChance;
@@ -41,13 +32,13 @@ class GeneticAlgorithm
 		_matingPopulationPercent = matingPopPercent;
         _elitism = elitism;
 
-		Robots = new List<Robot> ();
+        _genomeList = new List<NEATGenome> ();
 		for (int i = 0; i < _populationSize; i++) {
-			//create robot, objects passed to the constructor will be cloned
-			//and randomized for initial use
-			r = new Robot(gameObject, seedNetwork);
-			r._network.Randomize();
-			Robots.Add(r);
+            //create robot, objects passed to the constructor will be cloned
+            //and randomized for initial use
+            NEATGenome ng = new NEATGenome(seedNetwork);
+			ng.Randomize();
+            _genomeList.Add(ng);
 		}
 	}
 
@@ -94,12 +85,11 @@ class GeneticAlgorithm
 
         // Update stats and store reference to best genome.
         UpdateBestGenome();
-        UpdateStats();
 
         // Determine the complexity regulation mode and switch over to the appropriate set of evolution
         // algorithm parameters. Also notify the genome factory to allow it to modify how it creates genomes
         // (e.g. reduce or disable additive mutations).
-        _complexityRegulationMode = _complexityRegulationStrategy.DetermineMode(_stats);
+        /*_complexityRegulationMode = _complexityRegulationStrategy.DetermineMode(_stats);
         _genomeFactory.SearchMode = (int)_complexityRegulationMode;
         switch (_complexityRegulationMode)
         {
@@ -109,111 +99,9 @@ class GeneticAlgorithm
             case ComplexityRegulationMode.Simplifying:
                 _eaParams = _eaParamsSimplifying;
                 break;
-        }
+        }*/
 
-        //sort after receving final scores from fitness function
-        //fitness function is called by an outsides class
-        Robots.Sort();
-
-        Debug.Log("Best Robot: " + Robots[0].Fitness +
-            "\n\tHidden Nodes: " + (Robots[0]._network._nodeList.Count - (Robots[0]._network.InputCount + Robots[0]._network.OutputCount + 1)) +
-            "\n\tConnections: " + Robots[0]._network._connectionList.Count);
-		
-		int countToMate = (int)(_populationSize * _percentToMate);
-        int matingPopulationSize = (int)(_populationSize * _matingPopulationPercent);
-        int numOfOffspring = countToMate * 2;
-		int offspringIndex = matingPopulationSize;
-		
-
-
-		//split the mating into x / logical processor count threads
-		//or none if there is only 1
-
-		int procCount = Environment.ProcessorCount;
-
-        List<Robot> children = new List<Robot>();
-
-		for(int x = 0; x < countToMate; x++)
-		{
-			Robot mother = Robots[x];
-			//always keep best brain
-			int fatherindex = (int)((ThreadSafeRandom.NextDouble() * matingPopulationSize));
-			Robot father = Robots[fatherindex];
-			Robot child1 = Robots[offspringIndex];
-			Robot child2 = Robots[offspringIndex + 1];
-
-            child1._network = mother._network.CreateOffspring(father._network);
-            child2._network = mother._network.CreateOffspring(father._network);
-
-            if (ThreadSafeRandom.NextDouble() < _mutationChance)
-			{
-                child1._network.Mutate();
-			}
-			
-			if (ThreadSafeRandom.NextDouble() < _mutationChance)
-			{
-                child2._network.Mutate();
-            }
-
-            children.Add(child1);
-            children.Add(child2);
-
-			offspringIndex += 2;
-		}
-
-        //Debug.Log("Num Culled: " + numCulled);
-
-        //reset all robots to original start positions
-        Robot.RobotCount = 0; //just for naming purposes
-		for (int i = 0; i < Robots.Count; i++) 
-		{
-			Robots[i].Reset();
-			/*if(i < countToMate || i > _populationSize - numOfOffspring)
-			{
-				Robots[i].setVisible(true);
-			}
-			else
-			{
-				Robots[i].setVisible(false);
-			}*/
-		}
-
-        //need to cull robots that are not children to make more room in the gene pool
-        int numCulled = 0;
-        foreach (Robot r in Robots)
-        {
-            bool found = false;
-            if (r == Robots[0] && _elitism)
-            {
-                //Debug.Log("Skipping cull of elite brain: " + r.Fitness);
-                found = true;
-            }
-            else
-            {
-                foreach (Robot child in children)
-                {
-                    if (r.name == child.name)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-
-
-            //if it is not an offspring, then time to cull
-            if (!found)
-            {
-                //make new brain
-                r._network.Randomize();
-                r.setVisible(false);
-                numCulled++;
-            }
-            else
-            {
-                r.setVisible(true);
-            }
-        }        
+        
     }
 
     /// <summary>
@@ -231,8 +119,6 @@ class GeneticAlgorithm
         RouletteWheelLayout[] rwlArr = new RouletteWheelLayout[specieCount];
 
         // Count of species with non-zero selection size.
-        // If this is exactly 1 then we skip inter-species mating. One is a special case because for 0 the 
-        // species all get an even chance of selection, and for >1 we can just select normally.
         int nonZeroSpecieCount = 0;
         for (int i = 0; i < specieCount; i++)
         {
@@ -250,7 +136,7 @@ class GeneticAlgorithm
             double[] probabilities = new double[inst._selectionSizeInt];
             for (int j = 0; j < inst._selectionSizeInt; j++)
             {
-                probabilities[j] = genomeList[j].EvaluationInfo.Fitness;
+                probabilities[j] = genomeList[j].Fitness;
             }
             rwlArr[i] = new RouletteWheelLayout(probabilities);
         }
@@ -271,30 +157,12 @@ class GeneticAlgorithm
             // --- Produce the required number of offspring from asexual reproduction.
             for (int i = 0; i < inst._offspringAsexualCount; i++)
             {
-                int genomeIdx = RouletteWheel.SingleThrow(rwl, _rng);
+                int genomeIdx = RouletteWheel.SingleThrow(rwl);
                 NEATGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
                 offspringList.Add(offspring);
             }
-            _stats._asexualOffspringCount += (ulong)inst._offspringAsexualCount;
 
-            // --- Produce the required number of offspring from sexual reproduction.
-            // Cross-specie mating.
-            // If nonZeroSpecieCount is exactly 1 then we skip inter-species mating. One is a special case because
-            // for 0 the  species all get an even chance of selection, and for >1 we can just select species normally.
-            int crossSpecieMatings = nonZeroSpecieCount == 1 ? 0 :
-                                        (int)Utilities.ProbabilisticRound(_eaParams.InterspeciesMatingProportion
-                                                                        * inst._offspringSexualCount, _rng);
-            _stats._sexualOffspringCount += (ulong)(inst._offspringSexualCount - crossSpecieMatings);
-            _stats._interspeciesOffspringCount += (ulong)crossSpecieMatings;
-
-            // An index that keeps track of how many offspring have been produced in total.
             int matingsCount = 0;
-            for (; matingsCount < crossSpecieMatings; matingsCount++)
-            {
-                NEATGenome offspring = CreateOffspring_CrossSpecieMating(rwl, rwlArr, rwlSpecies, specieIdx, genomeList);
-                offspringList.Add(offspring);
-            }
-
             // For the remainder we use normal intra-specie mating.
             // Test for special case - we only have one genome to select from in the current specie. 
             if (1 == inst._selectionSizeInt)
@@ -302,7 +170,7 @@ class GeneticAlgorithm
                 // Fall-back to asexual reproduction.
                 for (; matingsCount < inst._offspringSexualCount; matingsCount++)
                 {
-                    int genomeIdx = RouletteWheel.SingleThrow(rwl, _rng);
+                    int genomeIdx = RouletteWheel.SingleThrow(rwl);
                     NEATGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
                     offspringList.Add(offspring);
                 }
@@ -313,16 +181,16 @@ class GeneticAlgorithm
                 for (; matingsCount < inst._offspringSexualCount; matingsCount++)
                 {
                     // Select parents. SelectRouletteWheelItem() guarantees parent2Idx!=parent1Idx
-                    int parent1Idx = RouletteWheel.SingleThrow(rwl, _rng);
+                    int parent1Idx = RouletteWheel.SingleThrow(rwl);
                     NEATGenome parent1 = genomeList[parent1Idx];
 
                     // Remove selected parent from set of possible outcomes.
                     RouletteWheelLayout rwlTmp = rwl.RemoveOutcome(parent1Idx);
                     if (0.0 != rwlTmp.ProbabilitiesTotal)
                     {   // Get the two parents to mate.
-                        int parent2Idx = RouletteWheel.SingleThrow(rwlTmp, _rng);
+                        int parent2Idx = RouletteWheel.SingleThrow(rwlTmp);
                         NEATGenome parent2 = genomeList[parent2Idx];
-                        NEATGenome offspring = parent1.CreateOffspring(parent2, _currentGeneration);
+                        NEATGenome offspring = parent1.CreateOffspring(parent2);
                         offspringList.Add(offspring);
                     }
                     else
@@ -334,12 +202,11 @@ class GeneticAlgorithm
                 }
             }
         }
-
-        _stats._totalOffspringCount += (ulong)offspringCount;
+        
         return offspringList;
     }
 
-    /// <summary>
+    /*/// <summary>
     /// Cross specie mating.
     /// </summary>
     /// <param name="rwl">RouletteWheelLayout for selectign genomes in teh current specie.</param>
@@ -367,11 +234,73 @@ class GeneticAlgorithm
         NEATGenome parent1 = genomeList[parent1Idx];
         NEATGenome parent2 = _specieList[specie2Idx].GenomeList[parent2Idx];
         return parent1.CreateOffspring(parent2, _currentGeneration);
+    }*/
+     
+
+    /// <summary>
+    /// Sorts the genomes within each species fittest first, secondary sorts on age.
+    /// </summary>
+    private void SortSpecieGenomes()
+    {
+        int minSize = _specieList[0].GenomeList.Count;
+        int maxSize = minSize;
+        int specieCount = _specieList.Count;
+
+        for (int i = 0; i < specieCount; i++)
+        {
+            _specieList[i].GenomeList.Sort();
+            minSize = Math.Min(minSize, _specieList[i].GenomeList.Count);
+            maxSize = Math.Max(maxSize, _specieList[i].GenomeList.Count);
+        }
+        
     }
 
-#endregion
+    /// <summary>
+    /// Clear the genome list within each specie.
+    /// </summary>
+    private void ClearAllSpecies()
+    {
+        foreach (Specie specie in _specieList)
+        {
+            specie.GenomeList.Clear();
+        }
+    }
 
-    #region Private Methods [Low Level Helper Methods]
+    /// <summary>
+    /// Rebuild _genomeList from genomes held within the species.
+    /// </summary>
+    private void RebuildGenomeList()
+    {
+        _genomeList.Clear();
+        foreach (Specie specie in _specieList)
+        {
+            _genomeList.AddRange(specie.GenomeList);
+        }
+    }
+
+    /// <summary>
+    /// Trims the genomeList in each specie back to the number of elite genomes specified in
+    /// specieStatsArr. Returns true if there are empty species following trimming.
+    /// </summary>
+    private bool TrimSpeciesBackToElite(SpecieStats[] specieStatsArr)
+    {
+        bool emptySpeciesFlag = false;
+        int count = _specieList.Count;
+        for (int i = 0; i < count; i++)
+        {
+            Specie specie = _specieList[i];
+            SpecieStats stats = specieStatsArr[i];
+
+            int removeCount = specie.GenomeList.Count - stats._eliteSizeInt;
+            specie.GenomeList.RemoveRange(stats._eliteSizeInt, removeCount);
+
+            if (0 == stats._eliteSizeInt)
+            {
+                emptySpeciesFlag = true;
+            }
+        }
+        return emptySpeciesFlag;
+    }
 
     /// <summary>
     /// Updates _currentBestGenome and _bestSpecieIdx, these are the fittest genome and index of the specie
@@ -394,147 +323,16 @@ class GeneticAlgorithm
             // Get the specie's first genome. Genomes are sorted, therefore this is also the fittest 
             // genome in the specie.
             NEATGenome genome = _specieList[i].GenomeList[0];
-            if (genome.EvaluationInfo.Fitness > bestFitness)
+            if (genome.Fitness > bestFitness)
             {
                 bestGenome = genome;
-                bestFitness = genome.EvaluationInfo.Fitness;
+                bestFitness = genome.Fitness;
                 bestSpecieIdx = i;
             }
         }
 
         _currentBestGenome = bestGenome;
         _bestSpecieIdx = bestSpecieIdx;
-    }
-
-    /// <summary>
-    /// Updates the NeatAlgorithmStats object.
-    /// </summary>
-    private void UpdateStats()
-    {
-        _stats._generation = _currentGeneration;
-        _stats._totalEvaluationCount = _genomeListEvaluator.EvaluationCount;
-
-        // Evaluation per second.
-        DateTime now = DateTime.Now;
-        TimeSpan duration = now - _stats._evalsPerSecLastSampleTime;
-
-        // To smooth out the evals per sec statistic we only update if at least 1 second has elapsed 
-        // since it was last updated.
-        if (duration.Ticks > 9999)
-        {
-            long evalsSinceLastUpdate = (long)(_genomeListEvaluator.EvaluationCount - _stats._evalsCountAtLastUpdate);
-            _stats._evaluationsPerSec = (int)((evalsSinceLastUpdate * 1e7) / duration.Ticks);
-
-            // Reset working variables.
-            _stats._evalsCountAtLastUpdate = _genomeListEvaluator.EvaluationCount;
-            _stats._evalsPerSecLastSampleTime = now;
-        }
-
-        // Fitness and complexity stats.
-        double totalFitness = _genomeList[0].EvaluationInfo.Fitness;
-        double totalComplexity = _genomeList[0].Complexity;
-        double maxComplexity = totalComplexity;
-
-        int count = _genomeList.Count;
-        for (int i = 1; i < count; i++)
-        {
-            totalFitness += _genomeList[i].EvaluationInfo.Fitness;
-            totalComplexity += _genomeList[i].Complexity;
-            maxComplexity = Math.Max(maxComplexity, _genomeList[i].Complexity);
-        }
-
-        _stats._maxFitness = _currentBestGenome.EvaluationInfo.Fitness;
-        _stats._meanFitness = totalFitness / count;
-
-        _stats._maxComplexity = maxComplexity;
-        _stats._meanComplexity = totalComplexity / count;
-
-        // Specie champs mean fitness.
-        double totalSpecieChampFitness = _specieList[0].GenomeList[0].EvaluationInfo.Fitness;
-        int specieCount = _specieList.Count;
-        for (int i = 1; i < specieCount; i++)
-        {
-            totalSpecieChampFitness += _specieList[i].GenomeList[0].EvaluationInfo.Fitness;
-        }
-        _stats._meanSpecieChampFitness = totalSpecieChampFitness / specieCount;
-
-        // Moving averages.
-        _stats._prevBestFitnessMA = _stats._bestFitnessMA.Mean;
-        _stats._bestFitnessMA.Enqueue(_stats._maxFitness);
-
-        _stats._prevMeanSpecieChampFitnessMA = _stats._meanSpecieChampFitnessMA.Mean;
-        _stats._meanSpecieChampFitnessMA.Enqueue(_stats._meanSpecieChampFitness);
-
-        _stats._prevComplexityMA = _stats._complexityMA.Mean;
-        _stats._complexityMA.Enqueue(_stats._meanComplexity);
-    }
-
-    /// <summary>
-    /// Sorts the genomes within each species fittest first, secondary sorts on age.
-    /// </summary>
-    private void SortSpecieGenomes()
-    {
-        int minSize = _specieList[0].GenomeList.Count;
-        int maxSize = minSize;
-        int specieCount = _specieList.Count;
-
-        for (int i = 0; i < specieCount; i++)
-        {
-            _specieList[i].GenomeList.Sort(GenomeFitnessComparer<NEATGenome>.Singleton);
-            minSize = Math.Min(minSize, _specieList[i].GenomeList.Count);
-            maxSize = Math.Max(maxSize, _specieList[i].GenomeList.Count);
-        }
-
-        // Update stats.
-        _stats._minSpecieSize = minSize;
-        _stats._maxSpecieSize = maxSize;
-    }
-
-    /// <summary>
-    /// Clear the genome list within each specie.
-    /// </summary>
-    private void ClearAllSpecies()
-    {
-        foreach (Specie<NEATGenome> specie in _specieList)
-        {
-            specie.GenomeList.Clear();
-        }
-    }
-
-    /// <summary>
-    /// Rebuild _genomeList from genomes held within the species.
-    /// </summary>
-    private void RebuildGenomeList()
-    {
-        _genomeList.Clear();
-        foreach (Specie<NEATGenome> specie in _specieList)
-        {
-            _genomeList.AddRange(specie.GenomeList);
-        }
-    }
-
-    /// <summary>
-    /// Trims the genomeList in each specie back to the number of elite genomes specified in
-    /// specieStatsArr. Returns true if there are empty species following trimming.
-    /// </summary>
-    private bool TrimSpeciesBackToElite(SpecieStats[] specieStatsArr)
-    {
-        bool emptySpeciesFlag = false;
-        int count = _specieList.Count;
-        for (int i = 0; i < count; i++)
-        {
-            Specie<NEATGenome> specie = _specieList[i];
-            SpecieStats stats = specieStatsArr[i];
-
-            int removeCount = specie.GenomeList.Count - stats._eliteSizeInt;
-            specie.GenomeList.RemoveRange(stats._eliteSizeInt, removeCount);
-
-            if (0 == stats._eliteSizeInt)
-            {
-                emptySpeciesFlag = true;
-            }
-        }
-        return emptySpeciesFlag;
     }
 
     /// <summary>
@@ -578,7 +376,7 @@ class GeneticAlgorithm
 
                 // Stochastic rounding will result in equal allocation if targetSizeReal is a whole
                 // number, otherwise it will help to distribute allocations evenly.
-                inst._targetSizeInt = (int)Utilities.ProbabilisticRound(targetSizeReal, _rng);
+                inst._targetSizeInt = (int)Utilities.ProbabilisticRound(targetSizeReal);
 
                 // Total up discretized target sizes.
                 totalTargetSizeInt += inst._targetSizeInt;
@@ -593,7 +391,7 @@ class GeneticAlgorithm
                 inst._targetSizeReal = (inst._meanFitness / totalMeanFitness) * (double)_populationSize;
 
                 // Discretize targetSize (stochastic rounding).
-                inst._targetSizeInt = (int)Utilities.ProbabilisticRound(inst._targetSizeReal, _rng);
+                inst._targetSizeInt = (int)Utilities.ProbabilisticRound(inst._targetSizeReal);
 
                 // Total up discretized target sizes.
                 totalTargetSizeInt += inst._targetSizeInt;
@@ -647,7 +445,7 @@ class GeneticAlgorithm
                 targetSizeDeltaInt *= -1;
                 for (int i = 0; i < targetSizeDeltaInt; i++)
                 {
-                    int specieIdx = RouletteWheel.SingleThrow(rwl, _rng);
+                    int specieIdx = RouletteWheel.SingleThrow(rwl);
                     specieStatsArr[specieIdx]._targetSizeInt++;
                 }
             }
@@ -671,7 +469,7 @@ class GeneticAlgorithm
             // after each decrement (to reflect that decrement).
             for (int i = 0; i < targetSizeDeltaInt;)
             {
-                int specieIdx = RouletteWheel.SingleThrow(rwl, _rng);
+                int specieIdx = RouletteWheel.SingleThrow(rwl);
 
                 // Skip empty species. This can happen because the same species can be selected more than once.
                 if (0 != specieStatsArr[specieIdx]._targetSizeInt)
@@ -681,9 +479,7 @@ class GeneticAlgorithm
                 }
             }
         }
-
-        // We now have Sum(_targetSizeInt) == _populationSize. 
-        Debug.Assert(SumTargetSizeInt(specieStatsArr) == _populationSize);
+        
 
         // TODO: Better way of ensuring champ species has non-zero target size?
         // However we need to check that the specie with the best genome has a non-zero targetSizeInt in order
@@ -695,7 +491,7 @@ class GeneticAlgorithm
             // Adjust down the target size of one of the other species to compensate.
             // Pick a specie at random (but not the champ specie). Note that this may result in a specie with a zero 
             // target size, this is OK at this stage. We handle allocations of zero in PerformOneGeneration().
-            int idx = RouletteWheel.SingleThrowEven(specieCount - 1, _rng);
+            int idx = RouletteWheel.SingleThrowEven(specieCount - 1);
             idx = idx == _bestSpecieIdx ? idx + 1 : idx;
 
             if (specieStatsArr[idx]._targetSizeInt > 0)
@@ -730,7 +526,7 @@ class GeneticAlgorithm
                     }
                     if (!done)
                     {
-                        throw new SharpNeatException("CalcSpecieStats(). Error adjusting target population size down. Is the population size less than or equal to the number of species?");
+                        throw new Exception("CalcSpecieStats(). Error adjusting target population size down. Is the population size less than or equal to the number of species?");
                     }
                 }
             }
@@ -751,7 +547,7 @@ class GeneticAlgorithm
 
             // Discretize the real size with a probabilistic handling of the fractional part.
             double eliteSizeReal = _specieList[i].GenomeList.Count * _eaParams.ElitismProportion;
-            int eliteSizeInt = (int)Utilities.ProbabilisticRound(eliteSizeReal, _rng);
+            int eliteSizeInt = (int)Utilities.ProbabilisticRound(eliteSizeReal);
 
             // Ensure eliteSizeInt is no larger than the current target size (remember it was calculated 
             // against the current size of the specie not its new target size).
@@ -763,7 +559,6 @@ class GeneticAlgorithm
             // the (usually small) chance of a cross-species mating.
             if (i == _bestSpecieIdx && inst._eliteSizeInt == 0)
             {
-                Debug.Assert(inst._targetSizeInt != 0, "Zero target size assigned to champ specie.");
                 inst._eliteSizeInt = 1;
             }
 
@@ -774,13 +569,13 @@ class GeneticAlgorithm
             // While we're here we determine the split between asexual and sexual reproduction. Again using 
             // some probabilistic logic to compensate for any rounding bias.
             double offspringAsexualCountReal = (double)inst._offspringCount * _eaParams.OffspringAsexualProportion;
-            inst._offspringAsexualCount = (int)Utilities.ProbabilisticRound(offspringAsexualCountReal, _rng);
+            inst._offspringAsexualCount = (int)Utilities.ProbabilisticRound(offspringAsexualCountReal);
             inst._offspringSexualCount = inst._offspringCount - inst._offspringAsexualCount;
 
             // Also while we're here we calculate the selectionSize. The number of the specie's fittest genomes
             // that are selected from to create offspring. This should always be at least 1.
             double selectionSizeReal = _specieList[i].GenomeList.Count * _eaParams.SelectionProportion;
-            inst._selectionSizeInt = Math.Max(1, (int)Utilities.ProbabilisticRound(selectionSizeReal, _rng));
+            inst._selectionSizeInt = Math.Max(1, (int)Utilities.ProbabilisticRound(selectionSizeReal));
         }
 
         return specieStatsArr;

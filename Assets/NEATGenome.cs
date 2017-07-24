@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class NEATGenome
+public class NEATGenome : IComparable<NEATGenome>
 {
     //*********SHARED BY ALL GENOMES:********//
     public static int CurrentInnovation = 0;
@@ -917,6 +917,19 @@ public class NEATGenome
             return false;
         }
         return (0 == (nodeGene.InputConnections.Count + nodeGene.OutputConnections.Count));
+    }
+
+    //order genomes by highest fitness first
+    public int CompareTo(NEATGenome other)
+    {
+        if(Fitness > other.Fitness)
+        {
+            return -1;
+        } else if (Fitness > other.Fitness)
+        {
+            return 1;
+        }
+        return 0;
     }
 
     /// <summary>

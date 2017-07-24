@@ -319,6 +319,13 @@ public class NEATGenome : IComparable<NEATGenome>
 
         return output;
     }
+
+	public NEATGenome CreateOffspring() {
+		NEATGenome ng = new NEATGenome (this);
+		ng.Mutate ();
+
+		return ng;
+	}
     
     public NEATGenome CreateOffspring(NEATGenome parent)
     {

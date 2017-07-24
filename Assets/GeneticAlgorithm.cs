@@ -158,7 +158,7 @@ class GeneticAlgorithm
             for (int i = 0; i < inst._offspringAsexualCount; i++)
             {
                 int genomeIdx = RouletteWheel.SingleThrow(rwl);
-                NEATGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
+                NEATGenome offspring = genomeList[genomeIdx].CreateOffspring();
                 offspringList.Add(offspring);
             }
 
@@ -171,7 +171,7 @@ class GeneticAlgorithm
                 for (; matingsCount < inst._offspringSexualCount; matingsCount++)
                 {
                     int genomeIdx = RouletteWheel.SingleThrow(rwl);
-                    NEATGenome offspring = genomeList[genomeIdx].CreateOffspring(_currentGeneration);
+                    NEATGenome offspring = genomeList[genomeIdx].CreateOffspring();
                     offspringList.Add(offspring);
                 }
             }
@@ -196,7 +196,7 @@ class GeneticAlgorithm
                     else
                     {   // No other parent has a non-zero selection probability (they all have zero fitness).
                         // Fall back to asexual reproduction of the single genome with a non-zero fitness.
-                        NEATGenome offspring = parent1.CreateOffspring(_currentGeneration);
+                        NEATGenome offspring = parent1.CreateOffspring();
                         offspringList.Add(offspring);
                     }
                 }
